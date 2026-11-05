@@ -4,7 +4,7 @@ import * as THREE from 'three';
  * The 3D Christmas room. Imperative on purpose: React hands it a guest list and calls a few verbs.
  * Returns null when WebGL is unavailable.
  */
-export function createRoomScene({ root, canvas, labels, bubble }) {
+export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); } catch (e) { return null; }
@@ -280,11 +280,16 @@ export function createRoomScene({ root, canvas, labels, bubble }) {
     g.root.traverse((o) => { if (o.isMesh && o.geometry !== paperGeo && o.geometry !== bandGeo) { o.geometry.dispose(); if (o.material !== paperM && o.material !== bandM) o.material.dispose(); } });
   }
   function seatAll() {
-    const n = guests.length, a0 = -50 * Math.PI / 180, span = 280 * Math.PI / 180;
+    // Seats fill a 280 degree arc that opens toward Santa. 90 degrees is front and center, nearest the camera.
+    const n = guests.length, span = 280 * Math.PI / 180, front = Math.PI / 2;
     guestScale = n <= 10 ? 1 : Math.max(0.6, Math.pow(10 / n, 0.75));
     const grow = n <= 10 ? 1 : Math.min(1.18, 1 + (n - 10) * 0.012);
+    // "Me" sits exactly at the front. An even count leaves one spare slot so both ends stay inside the arc.
+    const mi = guests.findIndex((g) => g.isMe);
+    const center = mi >= 0 ? mi : (n - 1) / 2;
+    const step = span / (mi >= 0 && n % 2 === 0 ? n + 1 : n);
     guests.forEach((g, i) => {
-      const a = a0 + (i + 0.5) / n * span;
+      const a = front + (i - center) * step;
       g.target.set(RING.cx + Math.cos(a) * RING.rx * grow, 0.03, RING.cz + Math.sin(a) * RING.rz * grow);
       g.face = Math.atan2(RING.cx - g.target.x, RING.cz - g.target.z);
     });
@@ -387,15 +392,24 @@ export function createRoomScene({ root, canvas, labels, bubble }) {
   function fit() {
     const w = root.clientWidth, h = root.clientHeight; if (!w || !h) return;
     renderer.setSize(w, h, false);
-    const asp = w / h, portrait = asp < 1;
-    camera.aspect = asp; camera.fov = portrait ? 52 : 40;
-    const t = Math.tan(camera.fov * Math.PI / 360), z = Math.max(11, (portrait ? 5.2 : 6.3) / (t * asp) - 3);
+    // Wide screens: the panel sits at the right, so nudge the room left.
+    // Narrow screens: the panel covers the bottom and the bar covers the top, so frame the room
+    // inside the free band between them. The view offset keeps drawing floor behind the panel.
+    const sidePanel = w >= 900 || (w >= 600 && h <= 560);
+    let freeTop = 0, freeH = h;
+    if (!sidePanel && insets) {
+      const s = insets();
+      freeTop = Math.max(0, s.top); freeH = h - freeTop - Math.max(0, s.bottom);
+      if (freeH < 150) { freeTop = Math.min(freeTop, h * 0.15); freeH = h * 0.42; }
+    }
+    const asp = w / freeH, tall = asp < 1;
+    camera.aspect = asp; camera.fov = tall ? 52 : 40;
+    const t = Math.tan(camera.fov * Math.PI / 360), z = Math.max(11, (tall ? 5.2 : 6.3) / (t * asp) - 3);
     camBase.set(0, z * 0.5, z);
     scene.fog.near = z + 6; scene.fog.far = z + 32;
-    if (portrait) camera.setViewOffset(w, h, 0, h * 0.16, w, h);
-    else if (w >= 900) camera.setViewOffset(w, h, w * 0.1, h * 0.03, w, h);
-    else if (w >= 600 && h <= 560) camera.setViewOffset(w, h, w * 0.19, 0, w, h);
-    else camera.clearViewOffset();
+    if (w >= 900) camera.setViewOffset(w, h, w * 0.1, h * 0.03, w, h);
+    else if (sidePanel) camera.setViewOffset(w, h, w * 0.19, 0, w, h);
+    else camera.setViewOffset(w, freeH, 0, -freeTop, w, h);
     camera.updateProjectionMatrix();
   }
   const ro = new ResizeObserver(fit); ro.observe(root); fit();
@@ -472,5 +486,5 @@ export function createRoomScene({ root, canvas, labels, bubble }) {
     renderer.dispose();
   }
 
-  return { setGuests, setStar: (id) => { starId = id || null; }, setJarRaised, flyPaper, burst, say, hush, dispose };
+  return { setGuests, setStar: (id) => { starId = id || null; }, setJarRaised, flyPaper, burst, say, hush, refit: fit, dispose };
 }

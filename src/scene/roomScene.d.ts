@@ -11,7 +11,16 @@ export type RoomScene = {
   burst(id: string): void;
   say(text: string, seconds?: number): void;
   hush(): void;
+  /** Re-frame the camera, e.g. after the UI covering the room changed size. */
+  refit(): void;
   dispose(): void;
 };
 
-export function createRoomScene(els: { root: HTMLElement; canvas: HTMLCanvasElement; labels: HTMLElement; bubble: HTMLElement }): RoomScene | null;
+export function createRoomScene(els: {
+  root: HTMLElement;
+  canvas: HTMLCanvasElement;
+  labels: HTMLElement;
+  bubble: HTMLElement;
+  /** Pixels of the root covered by UI at the top and bottom. Used on narrow screens to frame the room in what is left. */
+  insets?: () => { top: number; bottom: number };
+}): RoomScene | null;
