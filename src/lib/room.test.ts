@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { choosePick, createRoom, findByToken, joinOrLogin, pick, publicView, removeGuest, resetPin, RoomError, setLocked } from './room';
+import { choosePick, createRoom, findByToken, joinOrLogin, pick, publicView, removeGuest, resetPin, RoomError, setLocked, setWish } from './room';
 import type { Room } from './types';
 
 const NOW = 1_800_000_000_000;
@@ -36,10 +36,12 @@ describe('create and join', () => {
     expect(status(() => createRoom('X', { roomName: '', name: 'A', pin: '1234' }, NOW))).toBe(400);
   });
 
-  it('caps names at 14 characters and falls back to a valid sweater', () => {
+  it('caps names at 20 characters and falls back to a valid sweater', () => {
     const { room } = roomWith(['Aira']);
     joinOrLogin(room, { name: 'Maria Cristina Dela Cruz', pin: '1234', sweater: 42 }, NOW);
-    expect(room.guests[1].name).toBe('Maria Cristina');
+    expect(room.guests[1].name).toBe('Maria Cristina Dela');
+    joinOrLogin(room, { name: 'Lola Concepcion', pin: '1234' }, NOW);
+    expect(room.guests[2].name).toBe('Lola Concepcion');
     expect(room.guests[1].sweater).toBe(0xc2283a);
   });
 
@@ -67,6 +69,50 @@ describe('create and join', () => {
     expect(publicView(room, idOf(room, 'Aira')).me!.pickName).toBeNull();
     expect(publicView(room, idOf(room, 'Bea')).me!.pickName).toBeTruthy();
     expect(publicView(room, null).me).toBeNull();
+  });
+});
+
+describe('wishes', () => {
+  it('lets a guest set, trim, and clear their own wish', () => {
+    const { room } = roomWith(['Aira', 'Bea', 'Carla']);
+    setWish(room, idOf(room, 'Bea'), '  Warm   socks  ');
+    expect(publicView(room, idOf(room, 'Bea')).me!.wish).toBe('Warm socks');
+    setWish(room, idOf(room, 'Bea'), 'x'.repeat(200));
+    expect(publicView(room, idOf(room, 'Bea')).me!.wish).toHaveLength(80);
+    setWish(room, idOf(room, 'Bea'), undefined);
+    expect(publicView(room, idOf(room, 'Bea')).me!.wish).toBe('');
+    expect(status(() => setWish(room, 'nobody', 'A pony'))).toBe(404);
+  });
+
+  it('shows a wish only to the guest who drew its owner', () => {
+    const { room } = roomWith(['Aira', 'Bea', 'Carla']);
+    for (const name of ['Aira', 'Bea', 'Carla']) setWish(room, idOf(room, name), `Wish of ${name}`);
+    // Nobody has picked: no view carries anyone else's wish, not even the host's.
+    for (const name of ['Aira', 'Bea', 'Carla']) {
+      const view = publicView(room, idOf(room, name));
+      expect(view.me!.pickWish).toBe('');
+      expect(JSON.stringify(view).match(/Wish of \w+/g)).toEqual([`Wish of ${name}`]);
+    }
+    expect(JSON.stringify(publicView(room, null))).not.toMatch(/Wish of/);
+    setLocked(room, room.hostId, true);
+    for (const name of ['Aira', 'Bea', 'Carla']) pick(room, idOf(room, name));
+    for (const name of ['Aira', 'Bea', 'Carla']) {
+      const view = publicView(room, idOf(room, name));
+      expect(view.me!.pickWish).toBe(`Wish of ${view.me!.pickName}`);
+      expect(new Set(JSON.stringify(view).match(/Wish of \w+/g))).toEqual(new Set([`Wish of ${name}`, `Wish of ${view.me!.pickName}`]));
+    }
+  });
+
+  it('follows a wish changed after the pick, and loads guests saved before wishes existed', () => {
+    const { room } = roomWith(['Aira', 'Bea', 'Carla']);
+    for (const g of room.guests) delete g.wish;
+    setLocked(room, room.hostId, true);
+    pick(room, idOf(room, 'Aira'));
+    const before = publicView(room, idOf(room, 'Aira'));
+    expect(before.me!.wish).toBe('');
+    expect(before.me!.pickWish).toBe('');
+    setWish(room, before.me!.pickId!, 'A book');
+    expect(publicView(room, idOf(room, 'Aira')).me!.pickWish).toBe('A book');
   });
 });
 

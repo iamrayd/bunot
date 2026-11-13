@@ -1,6 +1,6 @@
 'use client';
 
-import { SWEATERS } from '@/lib/types';
+import { MAX_NAME, SWEATERS } from '@/lib/types';
 import type { Identity } from '@/lib/client';
 
 const SWEATER_NAMES = ['Berry red', 'Pine green', 'Gold', 'Snow blue', 'Plum', 'Cream'];
@@ -12,12 +12,12 @@ export default function IdentityFields({ value, onChange, idPrefix }: { value: I
       <div className="row">
         <div className="field">
           <label htmlFor={`${idPrefix}-name`}>Your name</label>
-          <input id={`${idPrefix}-name`} type="text" maxLength={14} autoComplete="off" placeholder="e.g. Sheryll"
+          <input id={`${idPrefix}-name`} type="text" maxLength={MAX_NAME} autoComplete="off" autoCapitalize="words" placeholder="e.g. Tita Baby"
             value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
         </div>
         <div className="field pin">
           <label htmlFor={`${idPrefix}-pin`}>PIN</label>
-          <input id={`${idPrefix}-pin`} type="text" inputMode="numeric" autoComplete="off" placeholder="4 digits"
+          <input id={`${idPrefix}-pin`} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off" placeholder="4 digits"
             value={value.pin} onChange={(e) => onChange({ ...value, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} />
         </div>
       </div>

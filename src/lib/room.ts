@@ -1,5 +1,5 @@
 import { checkPin, hashPin, hashToken, newId, newToken } from './auth';
-import { MAX_GUESTS, MIN_GUESTS, SWEATERS, type Guest, type Room, type RoomView } from './types';
+import { MAX_GUESTS, MAX_NAME, MAX_WISH, MIN_GUESTS, SWEATERS, type Guest, type Room, type RoomView } from './types';
 
 export class RoomError extends Error {
   constructor(public status: number, message: string) {
@@ -13,10 +13,10 @@ export type Outcome<T> = { room?: Room; result?: T; error?: RoomError };
 const MAX_FAILS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
-const clean = (raw: unknown, max: number) => String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+const clean = (raw: unknown, max: number) => String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, max).trim();
 
 function validName(raw: unknown) {
-  const name = clean(raw, 14);
+  const name = clean(raw, MAX_NAME);
   if (!name) throw new RoomError(400, 'Type your name so Santa knows who you are.');
   return name;
 }
@@ -35,7 +35,7 @@ function makeGuest(name: string, pin: string, sweater: number, now: number) {
   const token = newToken();
   const guest: Guest = {
     id: newId(), name, nameKey: name.toLowerCase(), sweater, pinSalt: salt, pinHash: hash, pinReset: false,
-    tokenHashes: [hashToken(token)], fails: 0, lockedUntil: 0, pick: null, joinedAt: now,
+    tokenHashes: [hashToken(token)], fails: 0, lockedUntil: 0, pick: null, joinedAt: now, wish: '',
   };
   return { guest, token };
 }
@@ -135,6 +135,12 @@ export function resetPin(room: Room, actorId: string, guestId: unknown): Outcome
   return { room, result: null };
 }
 
+/** A guest sets their own gift hint. Allowed at any time, so the guest who drew them sees the latest. */
+export function setWish(room: Room, actorId: string, wish: unknown): Outcome<null> {
+  requireGuest(room, actorId).wish = clean(wish, MAX_WISH);
+  return { room, result: null };
+}
+
 /**
  * Chooses who `pickerId` draws. Guarantees the draw can always finish with nobody drawing themselves:
  * when two pickers remain and the other one is still undrawn, the picker must take that other guest.
@@ -171,6 +177,9 @@ export function publicView(room: Room, meId: string | null): RoomView {
     code: room.code, name: room.name, exchangeDate: room.exchangeDate, budget: room.budget,
     locked: room.locked, started: started(room), papersLeft: room.guests.length - drawn.size,
     guests: room.guests.map((g) => ({ id: g.id, name: g.name, sweater: g.sweater, hasPicked: !!g.pick, isHost: g.id === room.hostId, pinReset: g.pinReset })),
-    me: me ? { id: me.id, name: me.name, isHost: me.id === room.hostId, pickId: picked?.id ?? null, pickName: picked?.name ?? null } : null,
+    me: me ? {
+      id: me.id, name: me.name, isHost: me.id === room.hostId, wish: me.wish ?? '',
+      pickId: picked?.id ?? null, pickName: picked?.name ?? null, pickWish: picked?.wish ?? '',
+    } : null,
   };
 }

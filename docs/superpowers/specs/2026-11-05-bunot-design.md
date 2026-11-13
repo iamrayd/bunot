@@ -8,17 +8,22 @@ A group opens one link on their own devices, sits in a 3D Christmas room, and ea
 
 In: landing page, create room, join room, lobby, pick from jar, private result, host controls, live view of guests joining and picking.
 
-Out: wishlists, sound, avatar choices beyond sweater color, email or social login.
+Out: avatar choices beyond sweater color, email or social login, pairs who must not draw each other.
+
+Added in the 2026-11-13 polish pass: wishes, sound, QR code and share sheet, switch person, result hidden by default, link preview image.
 
 ## Rules
 
-- A room has a 6-character code. Guests join with a name (max 14 characters), a 4-digit PIN, and a sweater color.
+- A room has a 6-character code. Guests join with a name (max 20 characters), a 4-digit PIN, and a sweater color.
 - Names are unique per room, compared without case. Entering an existing name with its PIN signs that guest back in on any device.
 - Five wrong PINs lock that name for five minutes.
 - The host is the guest who created the room. The host also picks.
 - The host locks the room to open the jar. Locking needs at least 3 guests. Nobody new can join a locked room. The host can unlock until the first pick; after that the lock is permanent.
 - The host can remove a guest while the room is unlocked, reset a guest's PIN (the guest then sets a new PIN at next sign-in), and pick on behalf of a guest who has not picked. The host never sees any result except their own.
 - A room holds at most 30 guests.
+- A guest can set a wish (max 80 characters) at any time. Only the guest who drew them sees it, and they see later edits too. The host does not see wishes.
+- The result tag is hidden on every load and when the tab goes to the background. The guest taps it to peek. The star over the drawn guest in the 3D room follows the tag.
+- "Switch person" removes the session token from that browser only. The seat stays in the room; the same name and PIN sign back in. This is how relatives share one phone.
 
 ## The pick
 
@@ -35,7 +40,7 @@ This guarantees every guest draws exactly one name, is drawn exactly once, and n
 - Next.js App Router on Vercel. Three.js (pinned to 0.128.0, the version the approved mockup was built on) draws the room.
 - One Supabase table, `rooms(code, state jsonb, version)`. The whole room is one JSON document. Every change is read, modify, then a conditional update on `version`, retried on conflict. This makes each change atomic without database functions and keeps all rules in TypeScript.
 - Row level security is on with no policies. Only the server, using the service role key, reads or writes rooms. Browsers never see PIN hashes or other guests' picks.
-- Browsers talk to two route handlers: `POST /api/rooms` (create) and `GET` / `POST /api/rooms/[code]` (view, and actions `join`, `lock`, `unlock`, `remove`, `resetPin`, `pick`).
+- Browsers talk to two route handlers: `POST /api/rooms` (create) and `GET` / `POST /api/rooms/[code]` (view, and actions `join`, `lock`, `unlock`, `remove`, `resetPin`, `pick`, `setWish`).
 - A guest's session is a random token kept in the browser's local storage; the server stores only its SHA-256 hash. PINs are stored as salted scrypt hashes.
 - Live updates: after each change the server sends a Supabase Realtime broadcast on `room:CODE`. Browsers refetch the view when it arrives, and also poll every few seconds as a fallback.
 - Local development without Supabase uses an in-memory store. Production refuses to start a room without Supabase configured.
@@ -46,6 +51,8 @@ This guarantees every guest draws exactly one name, is drawn exactly once, and n
 - `src/lib/auth.ts`: ids, tokens, PIN hashing.
 - `src/lib/store.ts`: storage (Supabase or memory), compare-and-swap `mutate`, broadcast.
 - `src/scene/roomScene.js`: the 3D room. Takes a guest list, exposes `setGuests`, `flyPaper`, `setJarRaised`, `setStar`, `say`, `burst`.
+- `src/lib/sound.ts`: Web Audio sounds, armed on the first tap, with a saved mute setting.
+- `src/components`: `JoinPanel`, `HostPanel`, `SharePanel` (copy, share sheet, QR code), `JarPicker`, `ResultTag`, `WishField`, `SoundToggle`.
 - `src/app/page.tsx`: landing. `src/app/r/[code]`: the room.
 
 ## Testing
