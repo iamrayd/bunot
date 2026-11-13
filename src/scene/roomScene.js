@@ -11,6 +11,10 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Colors below are written as sRGB hex. Light is computed in linear space and converted back on output.
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
 
   const NIGHT = 0x160c12;
   const scene = new THREE.Scene();
@@ -21,8 +25,10 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   const LOOK = new THREE.Vector3(0, 1.2, 0);
 
   /* ---------- helpers ---------- */
-  const M = (color, o) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.85, metalness: 0, flatShading: true }, o || {}));
-  const B = (color) => new THREE.MeshBasicMaterial({ color });
+  const lin = (hex) => new THREE.Color(hex).convertSRGBToLinear();
+  const M = (color, o) => new THREE.MeshStandardMaterial(Object.assign({ color: lin(color), roughness: 0.85, metalness: 0, flatShading: true }, o || {}));
+  /** Unlit and not tone mapped: used for things that glow. */
+  const B = (color) => new THREE.MeshBasicMaterial({ color: lin(color), toneMapped: false });
   const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
   const sph = (r, a = 10, b = 8) => new THREE.SphereGeometry(r, a, b);
   const cyl = (a, b, h, s = 10) => new THREE.CylinderGeometry(a, b, h, s);
@@ -39,6 +45,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     const c = document.createElement('canvas'); c.width = c.height = size;
     draw(c.getContext('2d'), size);
     const t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
     if (rx) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); }
     return t;
   }
@@ -54,27 +61,41 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     g.translate(0, 0, -depth / 2);
     return g;
   }
+  /** A soft additive halo. One shared texture; each halo has its own material so it can pulse. */
+  const glowTex = canvasTex(64, (g) => {
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.22, 'rgba(255,255,255,.42)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  });
+  function glow(parent, color, x, y, z, size, opacity = 0.5) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: lin(color), blending: THREE.AdditiveBlending, transparent: true, opacity, depthWrite: false, toneMapped: false }));
+    s.position.set(x, y, z); s.scale.setScalar(size);
+    parent.add(s);
+    return s;
+  }
   const twinkles = [];
   function bulb(parent, color, x, y, z, r = 0.07) {
     const m = add(parent, sph(r, 6, 5), B(color), x, y, z, false);
-    twinkles.push({ m, base: new THREE.Color(color), phase: Math.random() * 6.28, speed: 1.5 + Math.random() * 2.5 });
+    const halo = glow(parent, color, x, y, z + 0.14, r * 7, 0.4);
+    twinkles.push({ m, halo, base: lin(color), phase: Math.random() * 6.28, speed: 1.5 + Math.random() * 2.5 });
     return m;
   }
   const LIGHTS = [0xffd45e, 0xff5a4f, 0x7fe0a0, 0x6fb7ff, 0xfff3dc];
 
   /* ---------- lights ---------- */
-  scene.add(new THREE.HemisphereLight(0xffe9d0, 0x3a2030, 0.62));
-  const sun = new THREE.DirectionalLight(0xffe2b8, 0.6);
+  scene.add(new THREE.HemisphereLight(lin(0xffe9d0), lin(0x4a2a3a), 0.5));
+  const sun = new THREE.DirectionalLight(lin(0xffe2b8), 0.7);
   sun.position.set(5, 10, 8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 30 });
   sun.shadow.bias = -0.0006;
   scene.add(sun);
-  const fireLight = new THREE.PointLight(0xff7a2e, 1.5, 13);
+  const FIRE = 3.2;
+  const fireLight = new THREE.PointLight(lin(0xff7a2e), FIRE, 13);
   fireLight.position.set(-3.7, 1.1, -2.2);
   scene.add(fireLight);
-  const treeLight = new THREE.PointLight(0xffd27a, 0.55, 8);
+  const treeLight = new THREE.PointLight(lin(0xffd27a), 1.3, 8);
   treeLight.position.set(3.4, 2.6, -1);
   scene.add(treeLight);
 
@@ -125,6 +146,16 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     const f = add(fp, cone(0.2, h, 6), B(c), x, 0.42 + h / 2, 0.62 + (i > 2 ? 0.08 : 0), false);
     flames.push({ f, h, i });
   });
+  const fireGlow = glow(fp, 0xff7a2e, 0, 0.85, 0.95, 3.4, 0.3);
+  /* embers rising inside the firebox */
+  const EMB = 16, embPos = new Float32Array(EMB * 3), embSeed = [];
+  for (let i = 0; i < EMB; i++) {
+    const e = { x: Math.random() * 1.2 - 0.6, t: Math.random(), s: 0.3 + Math.random() * 0.4 };
+    embSeed.push(e); embPos.set([e.x, 0.5 + e.t, 0.68], i * 3);
+  }
+  const embGeo = new THREE.BufferGeometry(); embGeo.setAttribute('position', new THREE.BufferAttribute(embPos, 3));
+  const embers = new THREE.Points(embGeo, new THREE.PointsMaterial({ color: lin(0xffb347), size: 0.055, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  embers.frustumCulled = false; fp.add(embers);
   [-1.1, -0.35, 0.4, 1.1].forEach((x, i) => {
     const c = [0xc2283a, 0xfff3dc, 0x2f7d57, 0xc2283a][i], s = group(fp, x, 2.3, 0.6);
     add(s, box(0.24, 0.5, 0.08), M(c), 0, 0, 0);
@@ -181,7 +212,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   const JAR_Y = 0.66;
   const jar = group(santa, 0, JAR_Y, 0.86);
   jar.scale.setScalar(1.3);
-  add(jar, cyl(0.25, 0.22, 0.5, 14), new THREE.MeshStandardMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.3, roughness: 0.15, depthWrite: false }), 0, 0, 0, false);
+  add(jar, cyl(0.25, 0.22, 0.5, 14), new THREE.MeshStandardMaterial({ color: lin(0xcfe8ff), transparent: true, opacity: 0.3, roughness: 0.15, depthWrite: false }), 0, 0, 0, false);
   const jarRim = add(jar, new THREE.TorusGeometry(0.25, 0.03, 6, 16), M(0xf2c14e, { metalness: 0.4, roughness: 0.4 }), 0, 0.25, 0); jarRim.rotation.x = Math.PI / 2;
   const paperM = M(0xfffaf0), bandM = M(0xc2283a);
   const paperGeo = cyl(0.035, 0.035, 0.17, 6), bandGeo = cyl(0.039, 0.039, 0.03, 6);
@@ -201,6 +232,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   add(win, box(2.3, 2.7, 0.1), M(0xf3e2bd), 0, 0, 0);
   add(win, new THREE.PlaneGeometry(2.0, 2.4), B(0x0d1b3a), 0, 0, 0.06, false);
   add(win, new THREE.CircleGeometry(0.22, 18), B(0xf4f0d8), 0.55, 0.7, 0.065, false);
+  glow(win, 0xf4f0d8, 0.55, 0.7, 0.07, 1.1, 0.35);
   add(win, box(0.07, 2.4, 0.04), M(0xf3e2bd), 0, 0, 0.09);
   add(win, box(2.0, 0.07, 0.04), M(0xf3e2bd), 0, 0, 0.09);
   add(win, box(2.6, 0.12, 0.3), M(0xf3e2bd), 0, -1.38, 0.1);
@@ -216,7 +248,8 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   add(parolBody, starGeo(0.24, 0.1, 0.14), B(0xff6b5a), 0, 0, 0, false);
   add(parolBody, new THREE.TorusGeometry(0.56, 0.03, 6, 24), B(0xff6b5a), 0, 0, 0, false);
   [-0.3, 0.3].forEach((x) => { const t = add(parolBody, cone(0.06, 0.4, 6), B(0xfff3dc), x, -0.72, 0, false); t.rotation.z = Math.PI; });
-  const parolLight = new THREE.PointLight(0xffd27a, 0.5, 5); parolLight.position.set(1.35, 3.7, -2.6); scene.add(parolLight);
+  const parolGlow = glow(parolBody, 0xffc45e, 0, 0, 0.12, 2.6, 0.4);
+  const parolLight = new THREE.PointLight(lin(0xffd27a), 1.1, 5); parolLight.position.set(1.35, 3.7, -2.6); scene.add(parolLight);
 
   /* ---------- tree and presents ---------- */
   const tree = group(scene, 3.9, 0, -2.3);
@@ -233,6 +266,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     }
   });
   const treeStar = add(tree, starGeo(0.34, 0.14, 0.1), B(0xffd45e), 0, 4.35, 0, false);
+  glow(tree, 0xffd45e, 0, 4.35, 0.2, 1.5, 0.45);
   [[-1.5, 0.5, 0.9, 0xc2283a, 0xf2c14e], [-0.7, 0.7, 1.5, 0xfff3dc, 0xc2283a], [0.5, 0.45, 1.6, 0x2f7d57, 0xfff3dc], [1.5, 0.6, 0.7, 0xf2c14e, 0xc2283a], [-1.75, 0.38, 1.75, 0x3d6fb0, 0xfff3dc]].forEach(([x, s, z, c, r], i) => {
     const p = group(tree, x, s / 2, z); p.rotation.y = i * 0.7;
     add(p, box(s, s, s), M(c));
@@ -247,27 +281,36 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   const guests = [];
   let meId = null, firstSync = true, guestScale = 1, now = 0;
 
+  // Every guest shares these shapes, and materials are shared per color. Thirty guests cost a handful of GPU objects, not hundreds.
+  const GEO = {
+    leg: sph(0.16, 8, 6), arm: cyl(0.07, 0.065, 0.36, 6), hand: sph(0.07, 6, 5), body: cyl(0.2, 0.26, 0.46, 9), collar: cyl(0.21, 0.21, 0.06, 9),
+    head: sph(0.2, 10, 8), hair: new THREE.SphereGeometry(0.215, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), eye: sph(0.026, 6, 5),
+    hatBand: cyl(0.205, 0.205, 0.07, 10), hatCone: cone(0.18, 0.32, 8), hatBall: sph(0.055, 6, 5),
+  };
+  const matCache = new Map();
+  const CM = (color) => { let m = matCache.get(color); if (!m) { m = M(color); matCache.set(color, m); } return m; };
+
   function buildGuest(d) {
     const h = hashId(d.id), isMe = d.id === meId;
     const groupRoot = group(scene);
-    const pants = M(0x2c3550), sw = M(d.sweater), sk = M(SKINS[h % 4]);
+    const pants = CM(0x2c3550), sw = CM(d.sweater), sk = CM(SKINS[h % 4]), fur = CM(0xfff8ec), dark = CM(0x1c1416);
     const wearsHat = isMe || (h >> 6) % 2 === 0;
     [-1, 1].forEach((s) => {
-      const leg = add(groupRoot, sph(0.16, 8, 6), pants, s * 0.17, 0.12, 0.2); leg.scale.set(1.7, 0.75, 1); leg.rotation.y = s * 0.5;
-      const arm = add(groupRoot, cyl(0.07, 0.065, 0.36, 6), sw, s * 0.27, 0.4, 0.09); arm.rotation.set(-0.5, 0, s * 0.35);
-      add(groupRoot, sph(0.07, 6, 5), sk, s * 0.2, 0.22, 0.25);
+      const leg = add(groupRoot, GEO.leg, pants, s * 0.17, 0.12, 0.2); leg.scale.set(1.7, 0.75, 1); leg.rotation.y = s * 0.5;
+      const arm = add(groupRoot, GEO.arm, sw, s * 0.27, 0.4, 0.09); arm.rotation.set(-0.5, 0, s * 0.35);
+      add(groupRoot, GEO.hand, sk, s * 0.2, 0.22, 0.25);
     });
-    add(groupRoot, cyl(0.2, 0.26, 0.46, 9), sw, 0, 0.42, 0);
-    add(groupRoot, cyl(0.21, 0.21, 0.06, 9), M(0xfff8ec), 0, 0.64, 0);
+    add(groupRoot, GEO.body, sw, 0, 0.42, 0);
+    add(groupRoot, GEO.collar, fur, 0, 0.64, 0);
     const head = group(groupRoot, 0, 0.87, 0);
-    add(head, sph(0.2, 10, 8), sk);
-    const hair = add(head, new THREE.SphereGeometry(0.215, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), M(HAIRS[(h >> 3) % 4]), 0, 0.01, -0.01); hair.rotation.x = -0.3;
-    add(head, sph(0.026, 6, 5), M(0x1c1416), -0.07, 0.01, 0.186);
-    add(head, sph(0.026, 6, 5), M(0x1c1416), 0.07, 0.01, 0.186);
+    add(head, GEO.head, sk);
+    const hair = add(head, GEO.hair, CM(HAIRS[(h >> 3) % 4]), 0, 0.01, -0.01); hair.rotation.x = -0.3;
+    add(head, GEO.eye, dark, -0.07, 0.01, 0.186);
+    add(head, GEO.eye, dark, 0.07, 0.01, 0.186);
     if (wearsHat) {
-      add(head, cyl(0.205, 0.205, 0.07, 10), M(0xfff8ec), 0, 0.13, 0);
-      const c = add(head, cone(0.18, 0.32, 8), M(0xc2283a), 0.03, 0.31, 0); c.rotation.z = -0.2;
-      add(head, sph(0.055, 6, 5), M(0xfff8ec), 0.09, 0.47, 0);
+      add(head, GEO.hatBand, fur, 0, 0.13, 0);
+      const c = add(head, GEO.hatCone, CM(0xc2283a), 0.03, 0.31, 0); c.rotation.z = -0.2;
+      add(head, GEO.hatBall, fur, 0.09, 0.47, 0);
     }
     const gift = paperRoll(groupRoot, 0, 0.3, 0.3);
     gift.scale.setScalar(1.7);
@@ -276,8 +319,8 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     return { id: d.id, root: groupRoot, head, gift, el, hat: wearsHat, picked: false, flying: 0, pos: new THREE.Vector3(), target: new THREE.Vector3(), face: 0, hopT: -9, phase: (h % 628) / 100, born: -9 };
   }
   function destroyGuest(g) {
+    // Shapes and materials are shared, so there is nothing to free here.
     scene.remove(g.root); g.el.remove();
-    g.root.traverse((o) => { if (o.isMesh && o.geometry !== paperGeo && o.geometry !== bandGeo) { o.geometry.dispose(); if (o.material !== paperM && o.material !== bandM) o.material.dispose(); } });
   }
   function seatAll() {
     // Seats fill a 280 degree arc that opens toward Santa. 90 degrees is front and center, nearest the camera.
@@ -331,7 +374,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
   const confGeo = new THREE.BufferGeometry();
   confGeo.setAttribute('position', new THREE.BufferAttribute(confPos, 3));
   confGeo.setAttribute('color', new THREE.BufferAttribute(confCol, 3));
-  const conf = new THREE.Points(confGeo, new THREE.PointsMaterial({ size: 0.13, vertexColors: true, transparent: true }));
+  const conf = new THREE.Points(confGeo, new THREE.PointsMaterial({ size: 0.13, vertexColors: true, transparent: true, toneMapped: false }));
   conf.visible = false; conf.frustumCulled = false; scene.add(conf);
   let confT = -9;
   function burst(id) {
@@ -341,7 +384,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
       confPos.set([p.x, p.y, p.z], i * 3);
       const a = Math.random() * 6.283, s = 1 + Math.random() * 2.2;
       confVel[i] = [Math.cos(a) * s, 2.5 + Math.random() * 3, Math.sin(a) * s];
-      c.setHex(LIGHTS[i % LIGHTS.length]); confCol.set([c.r, c.g, c.b], i * 3);
+      c.setHex(LIGHTS[i % LIGHTS.length]).convertSRGBToLinear(); confCol.set([c.r, c.g, c.b], i * 3);
     }
     confGeo.attributes.color.needsUpdate = true;
     confT = now; conf.visible = true;
@@ -430,9 +473,14 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     camera.lookAt(LOOK);
 
     const flick = 0.85 + Math.sin(now * 11) * 0.08 + Math.sin(now * 23.7) * 0.07;
-    fireLight.intensity = 1.5 * flick;
+    fireLight.intensity = FIRE * flick; fireGlow.material.opacity = 0.3 * flick;
     flames.forEach(({ f, h, i }) => { const s = 1 + Math.sin(now * 9 + i * 2.1) * 0.22; f.scale.set(1 + Math.sin(now * 7 + i) * 0.12, s, 1); f.position.y = 0.42 + h * s / 2; });
-    twinkles.forEach((t) => { t.m.material.color.copy(t.base).multiplyScalar(0.55 + 0.45 * Math.sin(now * t.speed + t.phase)); });
+    twinkles.forEach((t) => { const k = 0.55 + 0.45 * Math.sin(now * t.speed + t.phase); t.m.material.color.copy(t.base).multiplyScalar(k); t.halo.material.opacity = 0.12 + 0.38 * k; });
+    if (!reduce) {
+      for (let i = 0; i < EMB; i++) { const e = embSeed[i]; e.t = (e.t + dt * e.s) % 1; embPos[i * 3] = e.x + Math.sin(now * 2 + i) * 0.07; embPos[i * 3 + 1] = 0.5 + e.t; }
+      embGeo.attributes.position.needsUpdate = true;
+    }
+    parolGlow.material.opacity = 0.34 + Math.sin(now * 1.7) * 0.07;
     treeStar.rotation.y = now * 0.8;
     parolBody.rotation.z = Math.sin(now * 0.9) * 0.08; parolBody.rotation.y = Math.sin(now * 0.6) * 0.3;
     for (let i = 0; i < SNOW; i++) { snowPos[i * 3 + 1] -= snowV[i] * dt; snowPos[i * 3] += Math.sin(now + i) * 0.0015; if (snowPos[i * 3 + 1] < -1.17) snowPos[i * 3 + 1] = 1.17; }
@@ -455,7 +503,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
       g.root.rotation.z = Math.sin(now * 1.3 + g.phase) * 0.035;
       g.head.rotation.y = Math.sin(now * 0.7 + g.phase) * 0.25; g.head.rotation.x = Math.sin(now * 1.1 + g.phase) * 0.06;
       v.set(g.pos.x, y + (g.hat ? 1.5 : 1.25) * guestScale, g.pos.z);
-      place(g.el, v.clone(), 0, 0, true);
+      place(g.el, v, 0, 0, true);
     });
 
     const sg = starId && byId(starId);
@@ -471,7 +519,7 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
       }
     }
     if (now > bubbleUntil) bubble.classList.remove('on');
-    santaHead.getWorldPosition(v); place(bubble, v.clone().setY(v.y + 1.0), 18, -30, false);
+    santaHead.getWorldPosition(v); v.y += 1.0; place(bubble, v, 18, -30, false);
 
     renderer.render(scene, camera);
     raf = requestAnimationFrame(frame);
@@ -483,6 +531,8 @@ export function createRoomScene({ root, canvas, labels, bubble, insets }) {
     root.removeEventListener('pointermove', onMove);
     labels.textContent = '';
     scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); });
+    Object.values(GEO).forEach((g) => g.dispose()); matCache.forEach((m) => m.dispose());
+    [paperGeo, bandGeo].forEach((g) => g.dispose()); [paperM, bandM].forEach((m) => m.dispose());
     renderer.dispose();
   }
 

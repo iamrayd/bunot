@@ -32,8 +32,9 @@ export default function SceneCanvas({ onReady }: { onReady: (scene: RoomScene | 
   return (
     <>
       <canvas ref={canvas} className="scene" aria-label="Christmas living room with Santa, a fireplace, a tree, and guests sitting on the rug" />
-      <div ref={labels} className="labels" />
-      <div ref={bubble} className="bubble" />
+      <div className="vignette" aria-hidden="true" />
+      <div ref={labels} className="labels" aria-hidden="true" />
+      <div ref={bubble} className="bubble" aria-hidden="true" />
       {failed && <p className="fallback">Your browser could not draw the 3D room. Everything else still works.</p>}
     </>
   );

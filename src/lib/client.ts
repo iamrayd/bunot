@@ -30,12 +30,34 @@ export const api = {
     call<{ token: string; view: RoomView }>('/api/rooms', { method: 'POST', body }),
   view: (code: string, token: string | null) => call<{ view: RoomView }>(`/api/rooms/${code}`, { token }),
   join: (code: string, body: Identity) => call<{ token: string; view: RoomView }>(`/api/rooms/${code}`, { method: 'POST', body: { type: 'join', ...body } }),
-  act: (code: string, token: string | null, body: { type: 'lock' | 'unlock' | 'remove' | 'resetPin' | 'pick'; guestId?: string; forGuestId?: string }) =>
+  act: (code: string, token: string | null, body: { type: 'lock' | 'unlock' | 'remove' | 'resetPin' | 'pick' | 'setWish'; guestId?: string; forGuestId?: string; wish?: string }) =>
     call<{ view: RoomView }>(`/api/rooms/${code}`, { method: 'POST', token, body }),
 };
 
 const key = (code: string) => `bunot:${code}`;
 export function loadToken(code: string) { try { return localStorage.getItem(key(code)); } catch { return null; } }
 export function saveToken(code: string, token: string) { try { localStorage.setItem(key(code), token); } catch { /* private mode */ } }
+
+export function clearToken(code: string) { try { localStorage.removeItem(key(code)); } catch { /* private mode */ } }
+
+const MUTE_KEY = 'bunot:muted';
+export function loadMuted() { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } }
+export function saveMuted(muted: boolean) { try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* private mode */ } }
+
+/** Copies text. Falls back to a hidden text box where the clipboard API is blocked (plain http on a home network). */
+export async function copyText(text: string) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* try the old way */ }
+  try {
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.cssText = 'position:fixed;left:-999px;top:0;opacity:0';
+    document.body.appendChild(box);
+    box.select();
+    const ok = document.execCommand('copy');
+    box.remove();
+    return ok;
+  } catch { return false; }
+}
 
 export const cleanCode = (raw: string) => raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);

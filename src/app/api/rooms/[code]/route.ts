@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { findByToken, joinOrLogin, pick, publicView, removeGuest, resetPin, RoomError, setLocked } from '@/lib/room';
+import { findByToken, joinOrLogin, pick, publicView, removeGuest, resetPin, RoomError, setLocked, setWish } from '@/lib/room';
 import { getRoom, mutate } from '@/lib/store';
 import { bearer, fail } from '@/lib/respond';
 import type { Room } from '@/lib/types';
@@ -43,6 +43,7 @@ export async function POST(req: Request, { params }: Ctx) {
       case 'remove': { const { room } = await run((r, id) => removeGuest(r, id, body.guestId)); return NextResponse.json({ view: publicView(room, meId) }); }
       case 'resetPin': { const { room } = await run((r, id) => resetPin(r, id, body.guestId)); return NextResponse.json({ view: publicView(room, meId) }); }
       case 'pick': { const { room } = await run((r, id) => pick(r, id, body.forGuestId)); return NextResponse.json({ view: publicView(room, meId) }); }
+      case 'setWish': { const { room } = await run((r, id) => setWish(r, id, body.wish)); return NextResponse.json({ view: publicView(room, meId) }); }
       default: throw new RoomError(400, 'Unknown action.');
     }
   } catch (e) {
