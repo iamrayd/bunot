@@ -42,42 +42,48 @@ export default function MusicPlayer() {
     const savedMuted = loadMusicMuted();
     const savedVol   = loadMusicVolume();
     setVolumeState(savedVol);
-    // Start muted — we flip to !muted on the first interaction below.
-    // But if the user had it ON last time, we want to play when possible.
     setMutedState(savedMuted);
 
     const el = new Audio(queue[0].src);
     el.loop    = false;
     el.preload = 'auto';
     el.volume  = savedVol;
+    // Start muted so the browser allows autoplay immediately.
+    // We unmute on the first user interaction below.
+    el.muted   = true;
     audio.current = el;
     setSongLabel(queue[0].label);
 
     el.addEventListener('ended', () => {
-      // advance to next track in the shuffled queue
       setTrackIdx((i) => (i + 1) % queue.length);
     });
 
-    /* Autoplay: attempt on first user gesture anywhere on the page */
-    function tryUnlock() {
+    // Begin playback right away (muted autoplay is universally allowed).
+    // If the user had music off last time, keep it paused.
+    if (!savedMuted) {
+      el.play().catch(() => {});
+    }
+
+    // On the first real interaction, unmute so the music is audible.
+    function unmute() {
       if (unlocked.current) return;
       unlocked.current = true;
-      const latestMuted = loadMusicMuted();
-      if (!latestMuted) {
-        el.play().catch(() => {});
+      if (!loadMusicMuted()) {
+        el.muted = false;
         setMutedState(false);
       }
     }
-    window.addEventListener('pointerdown', tryUnlock, { once: true });
-    window.addEventListener('keydown',     tryUnlock, { once: true });
+    window.addEventListener('pointerdown', unmute);
+    window.addEventListener('keydown',     unmute);
 
     return () => {
-      window.removeEventListener('pointerdown', tryUnlock);
-      window.removeEventListener('keydown',     tryUnlock);
+      window.removeEventListener('pointerdown', unmute);
+      window.removeEventListener('keydown',     unmute);
       el.pause();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   /* ── track changes: swap src and keep playing if not muted ── */
   useEffect(() => {
@@ -87,7 +93,10 @@ export default function MusicPlayer() {
     el.src = queue[trackIdx].src;
     el.load();
     setSongLabel(queue[trackIdx].label);
-    if (!muted) el.play().catch(() => {});
+    if (!muted) {
+      el.muted = false;
+      el.play().catch(() => {});
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackIdx, queue]);
 
@@ -109,6 +118,7 @@ export default function MusicPlayer() {
       el.pause();
     } else {
       unlocked.current = true;
+      el.muted = false;
       el.play().catch(() => {});
     }
   }, [muted]);
