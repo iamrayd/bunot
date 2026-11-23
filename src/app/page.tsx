@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import SceneCanvas from '@/components/SceneCanvas';
 import IdentityFields from '@/components/IdentityFields';
 import SoundToggle from '@/components/SoundToggle';
+import MusicPlayer from '@/components/MusicPlayer';
 import { api, cleanCode, saveToken, type Identity } from '@/lib/client';
 import { SWEATERS } from '@/lib/types';
 
@@ -57,6 +58,7 @@ export default function Landing() {
       <header className="top">
         <div className="brand"><b>Bunot</b><span>manito, manita</span></div>
         <SoundToggle />
+        <MusicPlayer />
       </header>
       <section className="panel">
         <h1>Gift exchange by the fire</h1>

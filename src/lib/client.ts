@@ -44,6 +44,14 @@ const MUTE_KEY = 'bunot:muted';
 export function loadMuted() { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } }
 export function saveMuted(muted: boolean) { try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* private mode */ } }
 
+const MUSIC_MUTE_KEY = 'bunot:music-muted';
+export function loadMusicMuted() { try { return localStorage.getItem(MUSIC_MUTE_KEY) === '1'; } catch { return false; } }
+export function saveMusicMuted(muted: boolean) { try { localStorage.setItem(MUSIC_MUTE_KEY, muted ? '1' : '0'); } catch { /* private mode */ } }
+
+const MUSIC_VOL_KEY = 'bunot:music-volume';
+export function loadMusicVolume() { try { const v = localStorage.getItem(MUSIC_VOL_KEY); return v !== null ? parseFloat(v) : 0.4; } catch { return 0.4; } }
+export function saveMusicVolume(vol: number) { try { localStorage.setItem(MUSIC_VOL_KEY, String(vol)); } catch { /* private mode */ } }
+
 /** Copies text. Falls back to a hidden text box where the clipboard API is blocked (plain http on a home network). */
 export async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { /* try the old way */ }

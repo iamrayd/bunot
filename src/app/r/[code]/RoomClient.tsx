@@ -9,6 +9,7 @@ import JoinPanel from '@/components/JoinPanel';
 import ResultTag from '@/components/ResultTag';
 import SharePanel from '@/components/SharePanel';
 import SoundToggle from '@/components/SoundToggle';
+import MusicPlayer from '@/components/MusicPlayer';
 import WishField from '@/components/WishField';
 import { api, ApiError, clearToken, copyText, loadToken, saveToken } from '@/lib/client';
 import { play } from '@/lib/sound';
@@ -198,6 +199,7 @@ export default function RoomClient({ code }: { code: string }) {
           </button>
         )}
         <SoundToggle />
+        <MusicPlayer />
       </header>
 
       <section className="panel">
