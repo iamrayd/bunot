@@ -220,3 +220,111 @@ fieldset { border: 0; margin: 0 0 10px; padding: 0; min-width: 0; }
   .scene, .overlay { animation: none; }
   .scroll, .scroll.out, .slip, .bubble, .progress i, .btn, .tag, .swatches i { transition-duration: .01s; }
 }
+
+/* ---------- wish reveal overlay ---------- */
+.wish-reveal-overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: grid; place-items: center;
+  background: rgba(22, 12, 18, .92);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: arrive .22s ease-out both;
+  overflow-y: auto;
+}
+.wish-reveal-card {
+  position: relative;
+  width: min(400px, 100%);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(rgba(140, 96, 48, .07) 1px, transparent 1.2px),
+    linear-gradient(170deg, var(--paper) 60%, var(--cream));
+  background-size: 6px 6px, auto;
+  border-radius: 24px;
+  padding: 48px 28px 32px;
+  outline: 1.5px dashed rgba(185, 138, 31, .5); outline-offset: -8px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .65), 0 2px 0 rgba(255,255,255,.5) inset;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  animation: wish-pop .38s cubic-bezier(.2, .9, .3, 1.1) both;
+}
+@keyframes wish-pop {
+  from { opacity: 0; transform: scale(.9) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+/* eyelet hole at the top */
+.wish-reveal-eyelet {
+  position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--night);
+  box-shadow: inset 0 0 0 4px var(--gold), inset 0 0 0 7px var(--gold-deep), 0 2px 6px rgba(0,0,0,.5);
+}
+/* back button */
+.wish-reveal-back {
+  position: absolute; top: 14px; left: 14px;
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 0; background: transparent;
+  color: var(--ink-soft); font: 700 13px var(--body);
+  cursor: pointer; padding: 4px 8px; border-radius: 8px;
+  transition: color .15s, background .15s;
+}
+.wish-reveal-back:hover { color: var(--berry-deep); background: rgba(194,40,58,.08); }
+.wish-reveal-back:focus-visible { outline: 2px solid var(--berry); outline-offset: 2px; }
+/* sub-label */
+.wish-reveal-sub {
+  margin: 0 0 4px; font-size: 13px; font-weight: 700;
+  color: var(--ink-soft); text-align: center; letter-spacing: .04em; text-transform: uppercase;
+}
+/* name */
+.wish-reveal-name {
+  margin: 0 0 10px; font-family: var(--display); font-weight: 400;
+  font-size: clamp(32px, 10vw, 52px); line-height: 1.1;
+  color: var(--berry); text-align: center; overflow-wrap: anywhere;
+  text-shadow: 0 3px 0 rgba(143, 26, 42, .18);
+}
+/* divider */
+.wish-reveal-divider {
+  font-size: 13px; color: var(--gold); letter-spacing: .3em;
+  margin: 2px 0 16px; text-align: center;
+}
+/* wish section */
+.wish-reveal-label {
+  margin: 0 0 10px; font-size: 12px; font-weight: 700;
+  color: var(--ink-soft); text-transform: uppercase; letter-spacing: .08em; text-align: center;
+}
+.wish-reveal-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 8px; width: 100%;
+}
+.wish-reveal-item {
+  display: flex; align-items: baseline; gap: 10px;
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(18px, 5vw, 24px); color: var(--ink);
+  line-height: 1.25; overflow-wrap: anywhere;
+  animation: wish-item-in .3s ease both;
+}
+.wish-reveal-item:nth-child(1) { animation-delay: .08s; }
+.wish-reveal-item:nth-child(2) { animation-delay: .15s; }
+.wish-reveal-item:nth-child(3) { animation-delay: .22s; }
+.wish-reveal-item:nth-child(4) { animation-delay: .28s; }
+.wish-reveal-item:nth-child(n+5) { animation-delay: .32s; }
+@keyframes wish-item-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.wish-reveal-bullet {
+  font-size: 14px; color: var(--gold); flex-shrink: 0; line-height: 1.6;
+}
+.wish-reveal-empty {
+  margin: 0; font-size: 15px; color: var(--ink-soft);
+  font-style: italic; text-align: center; padding: 8px 0;
+}
+/* footer */
+.wish-reveal-secret {
+  margin: 20px 0 0; font-size: 13px; font-weight: 700;
+  color: var(--ink-soft); text-align: center; letter-spacing: .04em;
+}
+@media (max-width: 420px) {
+  .wish-reveal-card { padding: 44px 18px 24px; border-radius: 18px; }
+  .wish-reveal-name { font-size: 36px; }
+  .wish-reveal-item { font-size: 20px; }
+}
+
