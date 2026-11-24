@@ -26,25 +26,23 @@ function shuffle<T>(arr: T[]): T[] {
 export default function MusicPlayer() {
   const audio        = useRef<HTMLAudioElement | null>(null);
   const unlocked     = useRef(false);
+  const userPaused   = useRef(false);
+  const isFirstRender = useRef(true);
   const wrapRef      = useRef<HTMLDivElement>(null);
 
   // Shuffle once on mount so every visit plays a different order.
   const [queue]     = useState(() => shuffle(PLAYLIST));
   const [trackIdx,  setTrackIdx]  = useState(0);
-  const [muted,     setMutedState] = useState(true);   // starts muted until first interaction
+  const [muted,     setMutedState] = useState(true);   // starts muted until playback starts
   const [volume,    setVolumeState] = useState(0.4);
   const [hovering,  setHovering]  = useState(false);
   // Initial label comes from the same shuffled queue[0] — set in the boot useEffect below.
   const [songLabel, setSongLabel] = useState('');
 
-  /* ── boot: restore prefs, wire audio element ── */
+  /* ── boot: restore prefs, wire audio element, 2-second autoplay ── */
   useEffect(() => {
-    const savedMuted = loadMusicMuted();
-    const savedVol   = loadMusicVolume();
+    const savedVol = loadMusicVolume();
     setVolumeState(savedVol);
-    // Start muted — we flip to !muted on the first interaction below.
-    // But if the user had it ON last time, we want to play when possible.
-    setMutedState(savedMuted);
 
     const el = new Audio(queue[0].src);
     el.loop    = false;
@@ -58,22 +56,35 @@ export default function MusicPlayer() {
       setTrackIdx((i) => (i + 1) % queue.length);
     });
 
-    /* Autoplay: attempt on first user gesture anywhere on the page */
-    function tryUnlock() {
-      if (unlocked.current) return;
-      unlocked.current = true;
-      const latestMuted = loadMusicMuted();
-      if (!latestMuted) {
-        el.play().catch(() => {});
-        setMutedState(false);
-      }
+    /** Function to autoplay music after 2 seconds or on interaction */
+    function autoplayMusic() {
+      if (unlocked.current || userPaused.current) return;
+      el.play()
+        .then(() => {
+          unlocked.current = true;
+          setMutedState(false);
+          saveMusicMuted(false);
+        })
+        .catch(() => {
+          // If browser policy prevents unprompted autoplay, gesture listeners will catch it
+        });
     }
-    window.addEventListener('pointerdown', tryUnlock, { once: true });
-    window.addEventListener('keydown',     tryUnlock, { once: true });
+
+    // Give 2 seconds and let it play
+    const timer = setTimeout(() => {
+      autoplayMusic();
+    }, 2000);
+
+    // Fallback gesture listeners so music starts on the first interaction if timer autoplay was blocked
+    const gestures = ['pointerdown', 'keydown', 'touchstart', 'click'];
+    const handleGesture = () => {
+      autoplayMusic();
+    };
+    gestures.forEach((evt) => window.addEventListener(evt, handleGesture, { passive: true }));
 
     return () => {
-      window.removeEventListener('pointerdown', tryUnlock);
-      window.removeEventListener('keydown',     tryUnlock);
+      clearTimeout(timer);
+      gestures.forEach((evt) => window.removeEventListener(evt, handleGesture));
       el.pause();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,6 +92,10 @@ export default function MusicPlayer() {
 
   /* ── track changes: swap src and keep playing if not muted ── */
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     const el = audio.current;
     if (!el) return;
     el.pause();
@@ -106,8 +121,10 @@ export default function MusicPlayer() {
     setMutedState(next);
     saveMusicMuted(next);
     if (next) {
+      userPaused.current = true;
       el.pause();
     } else {
+      userPaused.current = false;
       unlocked.current = true;
       el.play().catch(() => {});
     }
