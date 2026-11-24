@@ -32,6 +32,16 @@ export type Room = {
   locked: boolean;
   createdAt: number;
   guests: Guest[];
+  messages?: ChatMessage[];
+};
+
+export type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderSweater: number;
+  text: string;
+  createdAt: number;
 };
 
 export type PublicGuest = { id: string; name: string; sweater: number; hasPicked: boolean; isHost: boolean; pinReset: boolean };
@@ -45,6 +55,7 @@ export type RoomView = {
   started: boolean;
   papersLeft: number;
   guests: PublicGuest[];
+  messages: ChatMessage[];
   me: null | {
     id: string; name: string; isHost: boolean;
     /** My own gift hint. */

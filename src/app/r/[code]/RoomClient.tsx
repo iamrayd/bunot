@@ -11,6 +11,7 @@ import SharePanel from '@/components/SharePanel';
 import SoundToggle from '@/components/SoundToggle';
 import MusicPlayer from '@/components/MusicPlayer';
 import WishField from '@/components/WishField';
+import ChatPanel from '@/components/ChatPanel';
 import { api, ApiError, clearToken, copyText, loadToken, saveToken } from '@/lib/client';
 import { play } from '@/lib/sound';
 import { MIN_GUESTS, type RoomView } from '@/lib/types';
@@ -265,6 +266,16 @@ export default function RoomClient({ code }: { code: string }) {
           </>
         )}
       </section>
+
+      {view && (
+        <ChatPanel
+          code={code}
+          token={token.current}
+          me={me}
+          messages={view.messages ?? []}
+          onView={applyView}
+        />
+      )}
 
       {picking && view && <JarPicker count={view.papersLeft} onChoose={drawPaper} onDone={afterDraw} onCancel={closeJar} />}
     </main>

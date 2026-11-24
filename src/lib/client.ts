@@ -30,7 +30,7 @@ export const api = {
     call<{ token: string; view: RoomView }>('/api/rooms', { method: 'POST', body }),
   view: (code: string, token: string | null) => call<{ view: RoomView }>(`/api/rooms/${code}`, { token }),
   join: (code: string, body: Identity) => call<{ token: string; view: RoomView }>(`/api/rooms/${code}`, { method: 'POST', body: { type: 'join', ...body } }),
-  act: (code: string, token: string | null, body: { type: 'lock' | 'unlock' | 'remove' | 'resetPin' | 'pick' | 'setWish'; guestId?: string; forGuestId?: string; wish?: string }) =>
+  act: (code: string, token: string | null, body: { type: 'lock' | 'unlock' | 'remove' | 'resetPin' | 'pick' | 'setWish' | 'chat'; guestId?: string; forGuestId?: string; wish?: string; text?: string }) =>
     call<{ view: RoomView }>(`/api/rooms/${code}`, { method: 'POST', token, body }),
 };
 

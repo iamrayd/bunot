@@ -1,5 +1,5 @@
 import { checkPin, hashPin, hashToken, newId, newToken } from './auth';
-import { MAX_GUESTS, MAX_NAME, MAX_WISH, MIN_GUESTS, SWEATERS, type Guest, type Room, type RoomView } from './types';
+import { MAX_GUESTS, MAX_NAME, MAX_WISH, MIN_GUESTS, SWEATERS, type ChatMessage, type Guest, type Room, type RoomView } from './types';
 
 export class RoomError extends Error {
   constructor(public status: number, message: string) {
@@ -141,6 +141,23 @@ export function setWish(room: Room, actorId: string, wish: unknown): Outcome<nul
   return { room, result: null };
 }
 
+/** A signed-in guest posts a message to the room chat. Keeps the last 60 messages. */
+export function addMessage(room: Room, actorId: string, rawText: unknown): Outcome<ChatMessage> {
+  const g = requireGuest(room, actorId);
+  const text = clean(rawText, 140);
+  if (!text) throw new RoomError(400, 'Type a message to send.');
+  const msg: ChatMessage = {
+    id: newId(),
+    senderId: g.id,
+    senderName: g.name,
+    senderSweater: g.sweater,
+    text,
+    createdAt: Date.now(),
+  };
+  room.messages = (room.messages || []).concat(msg).slice(-60);
+  return { room, result: msg };
+}
+
 /**
  * Chooses who `pickerId` draws. Guarantees the draw can always finish with nobody drawing themselves:
  * when two pickers remain and the other one is still undrawn, the picker must take that other guest.
@@ -177,6 +194,7 @@ export function publicView(room: Room, meId: string | null): RoomView {
     code: room.code, name: room.name, exchangeDate: room.exchangeDate, budget: room.budget,
     locked: room.locked, started: started(room), papersLeft: room.guests.length - drawn.size,
     guests: room.guests.map((g) => ({ id: g.id, name: g.name, sweater: g.sweater, hasPicked: !!g.pick, isHost: g.id === room.hostId, pinReset: g.pinReset })),
+    messages: room.messages ?? [],
     me: me ? {
       id: me.id, name: me.name, isHost: me.id === room.hostId, wish: me.wish ?? '',
       pickId: picked?.id ?? null, pickName: picked?.name ?? null, pickWish: picked?.wish ?? '',
