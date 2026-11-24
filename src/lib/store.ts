@@ -96,12 +96,16 @@ async function notify(code: string) {
 export async function mutate<T>(rawCode: string, rule: (room: Room) => Outcome<T>): Promise<{ room: Room; result: T }> {
   const code = normalizeCode(rawCode);
   const s = getStore();
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 35; attempt++) {
     const row = await s.get(code);
     if (!row) throw new RoomError(404, 'No room has this code. Check the code and try again.');
     const out = rule(row.state);
     if (out.room) {
-      if (!(await s.cas(code, row.version, out.room))) continue;
+      if (!(await s.cas(code, row.version, out.room))) {
+        // Jitter backoff prevents collision storms when many guests pick simultaneously
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 25 + 5));
+        continue;
+      }
       await notify(code);
     }
     if (out.error) throw out.error;
